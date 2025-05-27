@@ -1,15 +1,15 @@
 /*********************************************
  * 1. DECLARAÇÃO DE PREDICADOS DINÂMICOS
  *********************************************/
-:- dynamic(bateria/1).
-:- dynamic(temperatura_motor/1).
-:- dynamic(nivel_oleo/1).
-:- dynamic(sensor_oxigenio/1).
-:- dynamic(luz_check_engine/0).
-:- dynamic(luz_bateria/0).
-:- dynamic(falha_ignicao/0).
-:- dynamic(barulho_incomum/0).
-:- dynamic(rotacao_alta/0).
+:- dynamic(bateria/1).              % Voltagem da bateria
+:- dynamic(temperatura_motor/1).    % Temperatura do motor em °C
+:- dynamic(nivel_oleo/1).          % Nível do óleo do motor
+:- dynamic(sensor_oxigenio/1).     % Leitura do sensor de oxigênio (lambda)
+:- dynamic(falha_ignicao/0).       % Indica falha na ignição/partida
+:- dynamic(barulho_incomum/0).     % Indica presença de ruídos anômalos
+:- dynamic(rotacao_alta/0).        % Indica problemas em alta rotação
+:- dynamic(luz_check_engine/0).    % Luz check engine acesa
+:- dynamic(luz_bateria/0).         % Luz da bateria acesa no painel
 
 
 /*********************************************
@@ -20,15 +20,15 @@
 
 /* Exemplos de causas representadas por termos que
    indicam possíveis problemas */
-causa(bateria_fraca).
-causa(alternador_defeituoso).
-causa(sistema_arrefecimento).
-causa(baixo_nivel_oleo).
-causa(vela_ignicao_defeituosa).
-causa(sensor_oxigenio_defeituoso).
-causa(problema_injecao).
-causa(problema_transmissao).
-causa(problema_interno_motor).  % Ex.: biela, pistão, etc.
+causa(bateria_fraca).              % Bateria com baixa carga
+causa(alternador_defeituoso).      % Alternador não funciona adequadamente
+causa(sistema_arrefecimento).      % Problemas no sistema de refrigeração
+causa(baixo_nivel_oleo).          % Nível de óleo insuficiente
+causa(vela_ignicao_defeituosa).   % Velas de ignição com defeito
+causa(sensor_oxigenio_defeituoso). % Sensor lambda defeituoso
+causa(problema_injecao).          % Sistema de injeção com problemas
+causa(problema_transmissao).      % Transmissão/câmbio com defeito
+causa(problema_interno_motor).    % Ex.: biela, pistão, etc.
 
 /*********************************************
  * 3. REGRAS DE DIAGNÓSTICO PRINCIPAIS
@@ -41,18 +41,18 @@ causa(problema_interno_motor).  % Ex.: biela, pistão, etc.
 %    - Se há falha de ignição, luz de bateria acesa
 %      e tensão da bateria < 12, conclui-se bateria_fraca.
 diagnostico(bateria_fraca) :-
-    falha_ignicao,
-    luz_bateria,
-    bateria(Voltage),
-    Voltage < 12.
+    falha_ignicao,                 % Carro não pega
+    luz_bateria,                   % Luz da bateria acesa
+    bateria(Voltage),              % Obtém voltagem da bateria
+    Voltage < 12.                  % Voltagem baixa (< 12V)
 
 % 3.2 Diagnóstico de alternador defeituoso
 %    - Se a bateria está fraca mesmo após recarga,
 %      ou se a luz de bateria acende durante o uso,
 %      suspeita do alternador.
 diagnostico(alternador_defeituoso) :-
-    luz_bateria,
-    \+ diagnostico(bateria_fraca).
+    luz_bateria,                   % Luz da bateria acesa
+    \+ diagnostico(bateria_fraca). % MAS não é bateria fraca
     /* Se não foi diagnosticada bateria_fraca,
        mas a luz continua acesa, pode ser alternador. */
 
@@ -60,64 +60,64 @@ diagnostico(alternador_defeituoso) :-
 %    - Se temperatura do motor > 100°C e/ou check engine aceso,
 %      indicamos problema de arrefecimento.
 diagnostico(sistema_arrefecimento) :-
-    temperatura_motor(T),
-    T > 100.
+    temperatura_motor(T),          % Obtém temperatura do motor
+    T > 100.                       % Superaquecimento crítico (> 100°C)
 
 diagnostico(sistema_arrefecimento) :-
-    luz_check_engine,
-    temperatura_motor(T),
-    T > 90.
+    luz_check_engine,              % Check engine acesa E
+    temperatura_motor(T),          % Temperatura elevada
+    T > 90.                        % Temperatura preocupante (> 90°C)
 
 % 3.4 Diagnóstico de baixo nível de óleo
 %    - Se nível do óleo está abaixo do mínimo,
 %      sugerimos problema relacionado ao óleo.
 diagnostico(baixo_nivel_oleo) :-
-    nivel_oleo(Nivel),
-    Nivel < 1.0.
+    nivel_oleo(Nivel),             % Obtém nível atual do óleo
+    Nivel < 1.0.                   % Nível crítico (< 1.0 litro)
 
 % 3.5 Diagnóstico de vela de ignição defeituosa
 %    - Se há falha de ignição frequente, mas a bateria está boa,
 %      suspeitamos da vela de ignição.
 diagnostico(vela_ignicao_defeituosa) :-
-    falha_ignicao,
-    \+ diagnostico(bateria_fraca),
-    bateria(Voltage),
-    Voltage >= 12.
+    falha_ignicao,                 % Falha na ignição
+    \+ diagnostico(bateria_fraca), % MAS bateria não está fraca
+    bateria(Voltage),              % Confirma voltagem da bateria
+    Voltage >= 12.                 % Bateria boa (= 12V)
 
 % 3.6 Diagnóstico de sensor de oxigênio defeituoso
 %    - Se o sensor de oxigênio marca valor fora da faixa normal
 %      e a luz de check engine pisca somente em alta rotação,
 %      pode ser o sensor de oxigênio.
 diagnostico(sensor_oxigenio_defeituoso) :-
-    sensor_oxigenio(Valor),
-    (Valor < 0.1; Valor > 0.9),
-    rotacao_alta,
-    luz_check_engine.
+    sensor_oxigenio(Valor),        % Obtém leitura do sensor lambda
+    (Valor < 0.1; Valor > 0.9),   % Valor anormal (fora de 0.1-0.9)
+    rotacao_alta,                  % Problema em alta rotação
+    luz_check_engine.              % Check engine acesa
 
 % 3.7 Diagnóstico de problema na injeção
 %    - Se há falha em alta rotação e a leitura do sensor de
 %      oxigênio está na faixa normal, pode ser a injeção.
 diagnostico(problema_injecao) :-
-    rotacao_alta,
-    luz_check_engine,
-    sensor_oxigenio(Valor),
-    Valor >= 0.1,
-    Valor =< 0.9.
+    rotacao_alta,                  % Problema em alta rotação
+    luz_check_engine,              % Check engine acesa
+    sensor_oxigenio(Valor),        % Obtém leitura do sensor
+    Valor >= 0.1,                  % Sensor funcionando normalmente
+    Valor =< 0.9.                  % (faixa normal: 0.1 a 0.9)
 
 % 3.8 Diagnóstico de ruídos no motor (problema interno ou transmissão)
 %    - Se há barulho incomum e perda de potência, mas a check engine
 %      não acende, pode ser mecânico (bielas, transmissão etc.).
 diagnostico(problema_interno_motor) :-
-    barulho_incomum,
-    \+ luz_check_engine,
-    temperatura_motor(T),
-    T < 100,  % Temperatura normal
-    !.
+    barulho_incomum,               % Ruídos estranhos no motor
+    \+ luz_check_engine,           % Check engine NÃO acesa
+    temperatura_motor(T),          % Verifica temperatura
+    T < 100,                       % Temperatura normal (< 100°C)
+    !.                             % Corte para evitar backtracking
 
 diagnostico(problema_transmissao) :-
-    barulho_incomum,
-    rotacao_alta,
-    \+ luz_check_engine.
+    barulho_incomum,               % Ruídos estranhos
+    rotacao_alta,                  % Problema em alta rotação
+    \+ luz_check_engine.           % Check engine NÃO acesa
 
 /*********************************************
  * 4. RECOMENDAÇÕES DE AÇÃO
@@ -127,10 +127,10 @@ diagnostico(problema_transmissao) :-
 recomendacao(bateria_fraca, 'Recarregar ou substituir a bateria').
 recomendacao(alternador_defeituoso, 'Verificar correia do alternador ou trocar alternador').
 recomendacao(sistema_arrefecimento, 'Checar radiador, bomba d\'água, ventoinha e fluido de arrefecimento').
-recomendacao(baixo_nivel_oleo, 'Completar o nível de óleo do motor ou trocar o óleo').
+recomendacao(baixo_nivel_oleo, 'Completar o nível de óleo do motor ou verificar vazamentos').
 recomendacao(vela_ignicao_defeituosa, 'Verificar e substituir velas de ignição defeituosas').
 recomendacao(sensor_oxigenio_defeituoso, 'Substituir sensor de oxigênio (sonda lambda)').
-recomendacao(problema_injecao, 'Verificar sistema de injeção e limpeza dos bicos injetores').
+recomendacao(problema_injecao, 'Verificar sistema de injeção e fazer limpeza dos bicos injetores').
 recomendacao(problema_transmissao, 'Verificar transmissão e trocar óleo da caixa se necessário').
 recomendacao(problema_interno_motor, 'Inspeção detalhada do motor - possível problema em bielas, pistões ou válvulas').
 
@@ -142,17 +142,17 @@ recomendacao(problema_interno_motor, 'Inspeção detalhada do motor - possível pro
 diagnosticar :-
     % Encontra todas as causas que satisfazem as regras
     findall(Causa, diagnostico(Causa), ListaCausas),
-    (   ListaCausas \= []
+    (   ListaCausas \= []          % Se encontrou pelo menos uma causa
     ->  format('Possiveis problemas diagnosticados: ~w~n',[ListaCausas]),
-        listar_recomendacoes(ListaCausas)
+        listar_recomendacoes(ListaCausas) % Lista as recomendações
     ;   write('Nenhum problema foi diagnosticado com as informacoes atuais.'), nl
     ).
 
-listar_recomendacoes([]).
+listar_recomendacoes([]).          % Caso base: lista vazia
 listar_recomendacoes([Causa|Resto]) :-
-    recomendacao(Causa, Rec),
+    recomendacao(Causa, Rec),      % Busca recomendação para a causa
     format(' -> Para ~w, recomenda-se: ~w~n', [Causa, Rec]),
-    listar_recomendacoes(Resto).
+    listar_recomendacoes(Resto).   % Processa resto da lista
 
 
 /*********************************************
@@ -167,57 +167,57 @@ listar_recomendacoes([Causa|Resto]) :-
 
 caso_teste_1_partida_inconsistente :-
     write('=== Caso de Teste 1: Partida Inconsistente ==='), nl,
-    limpar_estado,
-    assertz(falha_ignicao),
-    assertz(luz_bateria),
-    assertz(bateria(11.8)),
-    diagnosticar,
-    limpar_estado.
+    limpar_estado,                 % Limpa estado anterior
+    assertz(falha_ignicao),        % Adiciona falha de ignição
+    assertz(luz_bateria),          % Adiciona luz da bateria acesa
+    assertz(bateria(11.8)),        % Bateria com 11.8V (fraca)
+    diagnosticar,                  % Executa diagnóstico
+    limpar_estado.                 % Limpa para próximo teste
 
 caso_teste_2_superaquecimento :-
     write('=== Caso de Teste 2: Superaquecimento no Motor ==='), nl,
-    limpar_estado,
-    assertz(temperatura_motor(105)),
-    assertz(nivel_oleo(1.5)),
-    assertz(luz_check_engine),
-    diagnosticar,
-    limpar_estado.
+    limpar_estado,                 % Limpa estado anterior
+    assertz(temperatura_motor(105)), % Motor superaquecendo (105°C)
+    assertz(nivel_oleo(1.5)),      % Nível de óleo normal (1.5L)
+    assertz(luz_check_engine),     % Check engine acesa
+    diagnosticar,                  % Executa diagnóstico
+    limpar_estado.                 % Limpa para próximo teste
 
 caso_teste_3_motor_engasgado_altas_rotacoes :-
     write('=== Caso de Teste 3: Motor Engasgado em Altas Rotacoes ==='), nl,
-    limpar_estado,
-    assertz(rotacao_alta),
-    assertz(luz_check_engine),
-    assertz(sensor_oxigenio(1.0)), % valor fora do normal
-    diagnosticar,
-    limpar_estado.
+    limpar_estado,                 % Limpa estado anterior
+    assertz(rotacao_alta),         % Problema em alta rotação
+    assertz(luz_check_engine),     % Check engine acesa
+    assertz(sensor_oxigenio(1.0)), % Sensor lambda anormal (1.0)
+    diagnosticar,                  % Executa diagnóstico
+    limpar_estado.                 % Limpa para próximo teste
 
 caso_teste_4_ruidos_ao_acelerar :-
     write('=== Caso de Teste 4: Ruidos no Motor ao Acelerar ==='), nl,
-    limpar_estado,
-    assertz(barulho_incomum),
-    assertz(temperatura_motor(90)),  % dentro da faixa normal
-    diagnosticar,
-    limpar_estado.
+    limpar_estado,                 % Limpa estado anterior
+    assertz(barulho_incomum),      % Adiciona ruído anômalo
+    assertz(temperatura_motor(90)), % Temperatura normal (90°C)
+    diagnosticar,                  % Executa diagnóstico
+    limpar_estado.                 % Limpa para próximo teste
 
 % Predicado para limpar o estado dinâmico antes/depois dos testes
 limpar_estado :-
-    retractall(bateria(_)),
-    retractall(temperatura_motor(_)),
-    retractall(nivel_oleo(_)),
-    retractall(sensor_oxigenio(_)),
-    retractall(luz_check_engine),
-    retractall(luz_bateria),
-    retractall(falha_ignicao),
-    retractall(barulho_incomum),
-    retractall(rotacao_alta).
+    retractall(bateria(_)),        % Remove fatos da bateria
+    retractall(temperatura_motor(_)), % Remove fatos de temperatura
+    retractall(nivel_oleo(_)),     % Remove fatos do nível de óleo
+    retractall(sensor_oxigenio(_)), % Remove fatos do sensor lambda
+    retractall(luz_check_engine),  % Remove fato check engine
+    retractall(luz_bateria),       % Remove fato luz bateria
+    retractall(falha_ignicao),     % Remove fato falha ignição
+    retractall(barulho_incomum),   % Remove fato barulho
+    retractall(rotacao_alta).      % Remove fato rotação alta
 
-:- initialization(main).
+:- initialization(main).           % Inicializa programa com main
 
 main :-
     write('=== Executando varios casos de teste ==='), nl,
-    caso_teste_1_partida_inconsistente,
-    caso_teste_2_superaquecimento,
-    caso_teste_3_motor_engasgado_altas_rotacoes,
-    caso_teste_4_ruidos_ao_acelerar,
-    halt.
+    caso_teste_1_partida_inconsistente,     % Teste 1: Bateria fraca
+    caso_teste_2_superaquecimento,          % Teste 2: Superaquecimento
+    caso_teste_3_motor_engasgado_altas_rotacoes, % Teste 3: Alta rotação
+    caso_teste_4_ruidos_ao_acelerar,        % Teste 4: Ruídos no motor
+    halt.                          % Encerra o programa
