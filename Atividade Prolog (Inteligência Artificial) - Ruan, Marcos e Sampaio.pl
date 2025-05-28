@@ -10,7 +10,12 @@
 :- dynamic(rotacao_alta/0).        % Indica problemas em alta rotação
 :- dynamic(luz_check_engine/0).    % Luz check engine acesa
 :- dynamic(luz_bateria/0).         % Luz da bateria acesa no painel
-
+:- dynamic(velocidade_veiculo/1).  % Velocidade do veículo em km/h
+:- dynamic(consumo_combustivel/1). % Consumo em L/100 km
+:- dynamic(nivel_combustivel/1).   % Nível de combustivel em %
+:- dynamic(perda_potencia/0).      % Indica perda de potência
+:- dynamic(falha_partida_frio/0).  % Indica dificuldade na partida a frio
+:- dynamic(historico_manutencao/2). % historico_manutencao(Componente, Dias)
 
 /*********************************************
  * 2. FATOS BÁSICOS (SINTOMAS E CAUSAS)
@@ -29,6 +34,8 @@ causa(sensor_oxigenio_defeituoso). % Sensor lambda defeituoso
 causa(problema_injecao).          % Sistema de injeção com problemas
 causa(problema_transmissao).      % Transmissão/câmbio com defeito
 causa(problema_interno_motor).    % Ex.: biela, pistão, etc.
+causa(filtro_combustivel_entupido). % Filtro de combustivel bloqueado
+causa(bomba_combustivel_defeituosa). % Bomba de combustivel com problema
 
 /*********************************************
  * 3. REGRAS DE DIAGNÓSTICO PRINCIPAIS
@@ -82,7 +89,7 @@ diagnostico(vela_ignicao_defeituosa) :-
     falha_ignicao,                 % Falha na ignição
     \+ diagnostico(bateria_fraca), % MAS bateria não está fraca
     bateria(Voltage),              % Confirma voltagem da bateria
-    Voltage >= 12.                 % Bateria boa (= 12V)
+    Voltage >= 12.                 % Bateria boa (>= 12V)
 
 % 3.6 Diagnóstico de sensor de oxigênio defeituoso
 %    - Se o sensor de oxigênio marca valor fora da faixa normal
@@ -119,11 +126,29 @@ diagnostico(problema_transmissao) :-
     rotacao_alta,                  % Problema em alta rotação
     \+ luz_check_engine.           % Check engine NÃO acesa
 
+% 3.9 Diagnóstico de filtro de combustível entupido:
+diagnostico(filtro_combustivel_entupido) :-
+    perda_potencia,                % Perda de potência
+    falha_partida_frio,           % Dificuldade na partida a frio
+    rotacao_alta,                 % Problemas em alta rotação
+    historico_manutencao(filtro_combustivel, Dias),
+    Dias > 365.                   % Filtro não trocado há mais de 1 ano
+
+% 3.10 Diagnóstico de bomba de combustível defeituosa:
+diagnostico(bomba_combustivel_defeituosa) :-
+    falha_ignicao,                % Falha na ignição
+    nivel_combustivel(Nivel),     % Nível de combustível
+    Nivel > 20,                   % Combustível suficiente
+    bateria(Voltage),             % Bateria boa
+    Voltage >= 12,                % Voltagem corrigida
+    perda_potencia.               % Perda de potência
+
 /*********************************************
  * 4. RECOMENDAÇÕES DE AÇÃO
  *    - Associa cada causa a uma recomendação
  *      de manutenção / correção.
  *********************************************/
+
 recomendacao(bateria_fraca, 'Recarregar ou substituir a bateria').
 recomendacao(alternador_defeituoso, 'Verificar correia do alternador ou trocar alternador').
 recomendacao(sistema_arrefecimento, 'Checar radiador, bomba d\'água, ventoinha e fluido de arrefecimento').
@@ -133,6 +158,16 @@ recomendacao(sensor_oxigenio_defeituoso, 'Substituir sensor de oxigênio (sonda 
 recomendacao(problema_injecao, 'Verificar sistema de injeção e fazer limpeza dos bicos injetores').
 recomendacao(problema_transmissao, 'Verificar transmissão e trocar óleo da caixa se necessário').
 recomendacao(problema_interno_motor, 'Inspeção detalhada do motor - possível problema em bielas, pistões ou válvulas').
+recomendacao(bomba_combustivel_defeituosa, 'Verificar e substituir bomba de combustível').
+recomendacao(filtro_combustivel_entupido, 'Substituir filtro de combustível').
+
+% Sistema de criticidade
+criticidade(bateria_fraca, media).
+criticidade(vela_ignicao_defeituosa, media).
+criticidade(problema_injecao, media).
+criticidade(bomba_combustivel_defeituosa, alta).
+criticidade(filtro_combustivel_entupido, baixa).
+criticidade(_, baixa).
 
 /*********************************************
  * 5. PREDICADO PRINCIPAL DE DIAGNÓSTICO
@@ -154,7 +189,6 @@ listar_recomendacoes([Causa|Resto]) :-
     format(' -> Para ~w, recomenda-se: ~w~n', [Causa, Rec]),
     listar_recomendacoes(Resto).   % Processa resto da lista
 
-
 /*********************************************
  * 6. EXEMPLOS DE CASOS DE TESTE
  *    - Cada cenário insere (assert) valores
@@ -162,8 +196,6 @@ listar_recomendacoes([Causa|Resto]) :-
  *      diagnosticar/0 e depois limpa o estado.
  * * (não mexer)
  *********************************************/
-% Observação: Estes predicados são apenas exemplos
-% de como testar. Ajuste conforme desejar.
 
 caso_teste_1_partida_inconsistente :-
     write('=== Caso de Teste 1: Partida Inconsistente ==='), nl,
@@ -200,6 +232,27 @@ caso_teste_4_ruidos_ao_acelerar :-
     diagnosticar,                  % Executa diagnóstico
     limpar_estado.                 % Limpa para próximo teste
 
+% Casos de teste adicionais para os novos diagnósticos
+caso_teste_5_filtro_entupido :-
+    write('=== Caso de Teste 5: Filtro de Combustivel Entupido ==='), nl,
+    limpar_estado,
+    assertz(perda_potencia),
+    assertz(falha_partida_frio),
+    assertz(rotacao_alta),
+    assertz(historico_manutencao(filtro_combustivel, 400)),
+    diagnosticar,
+    limpar_estado.
+
+caso_teste_6_bomba_combustivel :-
+    write('=== Caso de Teste 6: Bomba de Combustivel Defeituosa ==='), nl,
+    limpar_estado,
+    assertz(falha_ignicao),
+    assertz(nivel_combustivel(50)),
+    assertz(bateria(12.5)),
+    assertz(perda_potencia),
+    diagnosticar,
+    limpar_estado.
+
 % Predicado para limpar o estado dinâmico antes/depois dos testes
 limpar_estado :-
     retractall(bateria(_)),        % Remove fatos da bateria
@@ -210,7 +263,13 @@ limpar_estado :-
     retractall(luz_bateria),       % Remove fato luz bateria
     retractall(falha_ignicao),     % Remove fato falha ignição
     retractall(barulho_incomum),   % Remove fato barulho
-    retractall(rotacao_alta).      % Remove fato rotação alta
+    retractall(rotacao_alta),      % Remove fato rotação alta
+    retractall(velocidade_veiculo(_)), % Corrigido
+    retractall(nivel_combustivel(_)),
+    retractall(consumo_combustivel(_)),
+    retractall(perda_potencia),    % Novos predicados
+    retractall(falha_partida_frio),
+    retractall(historico_manutencao(_, _)).
 
 :- initialization(main).           % Inicializa programa com main
 
@@ -220,86 +279,122 @@ main :-
     caso_teste_2_superaquecimento,          % Teste 2: Superaquecimento
     caso_teste_3_motor_engasgado_altas_rotacoes, % Teste 3: Alta rotação
     caso_teste_4_ruidos_ao_acelerar,        % Teste 4: Ruídos no motor
-    halt.                          % Encerra o programa
+    caso_teste_5_filtro_entupido,           % Teste 5: Filtro entupido
+    caso_teste_6_bomba_combustivel,         % Teste 6: Bomba combustível
+    halt. 
 /*********************************************
- * 7. EXPLICABILIDADE: COMO E POR QUE NÃO
+ * 7. EXPLICABILIDADE: COMO E POR QUE NAO
  *********************************************/
 
-% explica(Causa) imprime por que a causa foi inferida
+% O predicado explica/1 fornece justificativas detalhadas para cada causa diagnosticada.
+% Ele utiliza os sintomas e leituras atuais dos sensores para relatar por que uma falha foi identificada.
+
+% Justificativa para "bateria_fraca"
 explica(bateria_fraca) :-
-    falha_ignicao,
-    luz_bateria,
-    bateria(V),
-    V < 12,
-    format('Diagnóstico: bateria_fraca porque:~n'),
-    format('- Falha de ignição detectada.~n'),
-    format('- Luz de bateria acesa.~n'),
-    format('- Voltagem de ~1fV < 12V.~n', [V]).
+    falha_ignicao,               % Há falha ao tentar dar partida no motor
+    luz_bateria,                 % Luz da bateria acesa indica alerta no sistema elétrico
+    bateria(V),                  % Lê a voltagem da bateria
+    V < 12,                      % A voltagem está abaixo do mínimo recomendado
+    format('Diagnostico: bateria_fraca porque:\n'),
+    format('- Falha de ignicao detectada.\n'),
+    format('- Luz de bateria acesa.\n'),
+    format('- Voltagem de ~1fV < 12V.\n', [V]).
 
+% Justificativa para "alternador_defeituoso"
 explica(alternador_defeituoso) :-
-    luz_bateria,
-    bateria(V),
-    V >= 12,
-    format('Diagnóstico: alternador_defeituoso porque:~n'),
-    format('- Luz da bateria acesa durante uso.~n'),
-    format('- Bateria com ~1fV >= 12V, descartando problema na bateria.~n', [V]).
+    luz_bateria,                 % Luz da bateria acesa durante o funcionamento do motor
+    bateria(V),                  % Leitura da voltagem da bateria
+    V >= 12,                     % A bateria está carregada, descartando sua falha
+    format('Diagnostico: alternador_defeituoso porque:\n'),
+    format('- Luz da bateria acesa durante uso.\n'),
+    format('- Bateria com ~1fV >= 12V, descartando problema na bateria.\n', [V]).
 
+% Justificativa para "sistema_arrefecimento"
 explica(sistema_arrefecimento) :-
-    temperatura_motor(T),
-    T > 100,
-    format('Diagnóstico: sistema_arrefecimento porque:~n'),
-    format('- Temperatura do motor acima de 100°C: ~1f°C.~n', [T]).
+    temperatura_motor(T),        % Leitura da temperatura do motor
+    T > 100,                     % Temperatura acima do valor seguro
+    format('Diagnostico: sistema_arrefecimento porque:\n'),
+    format('- Temperatura do motor acima de 100°C: ~1f°C.\n', [T]).
 
+% Justificativa para "baixo_nivel_oleo"
 explica(baixo_nivel_oleo) :-
-    nivel_oleo(N),
-    N < 1.0,
-    format('Diagnóstico: baixo_nivel_oleo porque:~n'),
-    format('- Nível de óleo crítico: ~1fL < 1.0L.~n', [N]).
+    nivel_oleo(N),               % Lê o nível atual de óleo
+    N < 1.0,                     % Verifica se está abaixo do nível mínimo
+    format('Diagnostico: baixo_nivel_oleo porque:\n'),
+    format('- Nivel de oleo critico: ~1fL < 1.0L.\n', [N]).
 
+% Justificativa para "vela_ignicao_defeituosa"
 explica(vela_ignicao_defeituosa) :-
-    falha_ignicao,
-    bateria(V),
-    V >= 12,
-    format('Diagnóstico: vela_ignicao_defeituosa porque:~n'),
-    format('- Falha de ignição presente.~n'),
-    format('- Bateria com ~1fV >= 12V (boa), descartando problema na bateria.~n', [V]).
+    falha_ignicao,               % Há falha na ignição
+    bateria(V),                  % Leitura da voltagem da bateria
+    V >= 12,                     % Bateria está boa
+    format('Diagnostico: vela_ignicao_defeituosa porque:\n'),
+    format('- Falha de ignicao presente.\n'),
+    format('- Bateria com ~1fV >= 12V, descartando problema na bateria.\n', [V]).
 
+% Justificativa para "sensor_oxigenio_defeituoso"
 explica(sensor_oxigenio_defeituoso) :-
-    sensor_oxigenio(Val),
-    (Val < 0.1 ; Val > 0.9),
-    rotacao_alta,
-    luz_check_engine,
-    format('Diagnóstico: sensor_oxigenio_defeituoso porque:~n'),
-    format('- Sensor de oxigênio fora da faixa: ~1f (esperado: 0.1 a 0.9).~n', [Val]),
-    format('- Problemas em alta rotação.~n'),
-    format('- Luz de check engine acesa.~n').
+    sensor_oxigenio(Val),        % Leitura do sensor de oxigênio
+    (Val < 0.1 ; Val > 0.9),     % Valor fora da faixa ideal (0.1 a 0.9)
+    rotacao_alta,                % Problemas surgem em alta rotação
+    luz_check_engine,            % Check Engine acesa
+    format('Diagnostico: sensor_oxigenio_defeituoso porque:\n'),
+    format('- Sensor de oxigenio fora da faixa: ~1f (esperado: 0.1 a 0.9).\n', [Val]),
+    format('- Problemas em alta rotacao.\n'),
+    format('- Luz de check engine acesa.\n').
 
+% Justificativa para "problema_injecao"
 explica(problema_injecao) :-
-    rotacao_alta,
-    luz_check_engine,
-    sensor_oxigenio(Val),
+    rotacao_alta,                % Problemas ocorrem em alta rotação
+    luz_check_engine,            % Luz de alerta acesa
+    sensor_oxigenio(Val),        % Leitura do sensor está dentro da faixa
     Val >= 0.1,
     Val =< 0.9,
-    format('Diagnóstico: problema_injecao porque:~n'),
-    format('- Sensor de oxigênio dentro da faixa (~1f).~n', [Val]),
-    format('- Problemas detectados em alta rotação com check engine acesa.~n').
+    format('Diagnostico: problema_injecao porque:\n'),
+    format('- Sensor de oxigenio dentro da faixa (~1f).\n', [Val]),
+    format('- Problemas detectados em alta rotacao com check engine acesa.\n').
 
+% Justificativa para "problema_transmissao"
 explica(problema_transmissao) :-
-    barulho_incomum,
-    rotacao_alta,
-    \+ luz_check_engine,
-    format('Diagnóstico: problema_transmissao porque:~n'),
-    format('- Barulho incomum com rotação alta e sem check engine acesa.~n').
+    barulho_incomum,             % Há ruídos no sistema
+    rotacao_alta,                % Problemas se manifestam com rotação alta
+    \+ luz_check_engine,         % Luz de check engine não está acesa
+    format('Diagnostico: problema_transmissao porque:\n'),
+    format('- Barulho incomum com rotacao alta e sem check engine acesa.\n').
 
+% Justificativa para "problema_interno_motor"
 explica(problema_interno_motor) :-
-    barulho_incomum,
-    \+ luz_check_engine,
-    temperatura_motor(T),
+    barulho_incomum,             % Há ruídos no motor
+    \+ luz_check_engine,         % Sem luz de check engine
+    temperatura_motor(T),        % Temperatura estável
     T < 100,
-    format('Diagnóstico: problema_interno_motor porque:~n'),
-    format('- Barulho incomum com temperatura normal (~1f°C) e sem luz de check engine.~n', [T]).
+    format('Diagnostico: problema_interno_motor porque:\n'),
+    format('- Barulho incomum com temperatura normal (~1f°C) e sem luz de check engine.\n', [T]).
 
-% por_que_nao(Causa) explica por que uma causa NÃO foi diagnosticada
+% Justificativa para "filtro_combustivel_entupido"
+explica(filtro_combustivel_entupido) :-
+    perda_potencia,              % Perda de desempenho
+    falha_partida_frio,         % Dificuldade de partida a frio
+    rotacao_alta,               % Falhas com rotação alta
+    historico_manutencao(filtro_combustivel, Dias), % Histórico de manutenção
+    Dias > 365,                  % Última troca há mais de um ano
+    format('Diagnostico: filtro_combustivel_entupido porque:\n'),
+    format('- Perda de potencia e falha na partida a frio.\n'),
+    format('- Rotacao alta com filtro de combustivel sem manutencao ha ~w dias.\n', [Dias]).
+
+% Justificativa para "bomba_combustivel_defeituosa"
+explica(bomba_combustivel_defeituosa) :-
+    falha_ignicao,               % Falha ao tentar dar partida
+    nivel_combustivel(N),       % Há combustível suficiente
+    N > 20,
+    bateria(V),                 % Bateria está boa
+    V >= 12,
+    perda_potencia,             % Perda de potência identificada
+    format('Diagnostico: bomba_combustivel_defeituosa porque:\n'),
+    format('- Falha de ignicao mesmo com combustivel (~1f%%) e bateria boa (~1fV).\n', [N, V]),
+    format('- Perda de potencia identificada.\n').
+
+% O predicado por_que_nao/1 fornece uma justificativa genérica para causas nao diagnosticadas.
 por_que_nao(Causa) :-
-    \+ diagnostico(Causa),
-    format('A causa ~w não foi diagnosticada porque uma ou mais condições não foram satisfeitas.~n', [Causa]).
+    \+ diagnostico(Causa),      % A causa não foi detectada pelo sistema  
+    format('A causa ~w nao foi diagnosticada porque uma ou mais condicoes nao foram satisfeitas.\n', [Causa]).  % Encerra o programa
